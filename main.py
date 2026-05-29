@@ -2,6 +2,7 @@ import random
 import sys
 import os
 import ast
+import json
 from time import localtime
 from requests import get, post
 from datetime import datetime, date
@@ -183,7 +184,9 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
         else:
             birthday_data = f"距离{value['name']}的生日还有{birth_day}天"
         data["data"][key] = {"value": birthday_data, "color": get_color()}
-        
+     
+    print("🔍 [调试核心数据] 即将发给微信的完整包裹是：")
+    print(json.dumps(data["data"], indent=2, ensure_ascii=False)) 
     headers = {
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
