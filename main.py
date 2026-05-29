@@ -31,55 +31,34 @@ def get_access_token():
         sys.exit(1)
 
 def get_weather(region):
-    # 🌟 核心突破点 1：不再伪造浏览器！使用普通的脚本 UA 往往更容易通过国内 API 的机房防护策略
     headers = {
         'User-Agent': 'WeatherPushScript/1.0 (requests/Python)'
     }
-    
-    # 🌟 核心突破点 2：彻底清理配置文件中的隐藏换行符和空格（非常关键！）
     key = str(config.get("weather_key", "")).strip()
-    clean_region = str(region).strip()
     
-    region_api_url = "https://geoapi.qweather.com/v2/city/lookup"
+    # 🌟 强行绕过被封锁的地区搜索接口，直接使用怀化市的专属 ID！
+    location_id = "101251201" 
+    print(f"🌟 已跳过城市搜索接口，强行使用怀化市 ID: {location_id} 进行请求...")
     
-    # 发送请求获取地区ID
-    res = get(region_api_url, headers=headers, params={"location": clean_region, "key": key})
-    
-    # 🌟 调试神器：在日志里打印出它实际拼出的 URL（隐藏你的真实 Key 防止泄露）
-    # 如果下次还失败，你可以把打印出来的链接直接复制到自己电脑浏览器里看看能不能打开！
-    safe_url = res.url.replace(key, "******") if key else res.url
-    print(f"🔍 [调试诊断] 正在请求接口: {safe_url}")
-        
-    try:
-        response = res.json()
-    except Exception:
-        print(f"❌ 地区接口依然被拦截！HTTP状态码: {res.status_code}")
-        print(f"返回的原始内容: '{res.text}'")
-        print("💡 终极诊断建议：请复制上面的 [调试诊断] 链接，把 ****** 换成你的真实 Key，在你的电脑浏览器里打开看看。如果电脑能打开但 GitHub 上打不开，说明 GitHub IP 彻底被和风拉黑了。")
-        sys.exit(1)
-
-    # 这里的 code 才是和风天气应用层返回的真实状态
-    code = str(response.get("code"))
-    if code == "404":
-        print(f"❌ 推送失败，和风天气查不到地区：{clean_region}，请检查该地区是否支持！")
-        sys.exit(1)
-    elif code == "401":
-        print("❌ 推送失败，请检查和风天气 key 是否正确、是否过期，或你是否注册错了版本！")
-        sys.exit(1)
-    elif code != "200":
-        print(f"❌ 获取地区ID失败，和风天气返回码: {code}")
-        sys.exit(1)
-    
-    location_id = response["location"][0]["id"]
-    
-    # 获取天气详情
+    # 直接获取天气详情
     weather_api_url = "https://devapi.qweather.com/v7/weather/now"
     res_weather = get(weather_api_url, headers=headers, params={"location": location_id, "key": key})
     
+    print(f"🔍 [调试] 天气接口最终请求状态: {res_weather.status_code}")
+    
+    if res_weather.status_code != 200:
+        print(f"❌ 坏消息，连天气详情接口也被 Github IP 彻底拉黑了。内容: '{res_weather.text}'")
+        sys.exit(1)
+        
     try:
         response_weather = res_weather.json()
     except Exception:
-        print(f"❌ 天气详情接口解析失败，HTTP状态码: {res_weather.status_code}")
+        print(f"❌ 天气详情接口返回非 JSON 数据，已被拦截！")
+        sys.exit(1)
+
+    code = str(response_weather.get("code"))
+    if code != "200":
+        print(f"❌ 获取天气失败，和风天气业务报错码: {code}")
         sys.exit(1)
 
     # 解析天气
@@ -88,6 +67,8 @@ def get_weather(region):
     wind_dir = response_weather["now"]["windDir"]
     
     return weather, temp, wind_dir
+
+
 def get_birthday(birthday_str, year, today):
     birthday_year = birthday_str.split("-")[0]
     # 判断是否为农历生日
