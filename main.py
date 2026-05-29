@@ -38,7 +38,26 @@ def get_weather(region):
     }
     key = config["weather_key"]
     region_url = "https://geoapi.qweather.com/v2/city/lookup?location={}&key={}".format(region, key)
-    response = get(region_url, headers=headers).json()
+ import requests
+
+# 1. 发送请求但不急着解析 JSON
+response = get(region_url, headers=headers)
+
+# 2. 检查 HTTP 状态码
+if response.status_code != 200:
+    print(f"❌ 请求失败！HTTP 状态码: {response.status_code}")
+    print(f"🔍 API 实际返回的内容: {response.text}")
+    # 这里可以根据你的业务逻辑选择退出或返回默认天气
+    raise Exception("API 请求失败，请查看日志。")
+
+# 3. 尝试解析 JSON 并捕获异常
+try:
+    weather_data = response.json()
+    # 继续你后面的逻辑...
+except requests.exceptions.JSONDecodeError:
+    print(f"❌ JSON 解析失败！")
+    print(f"🔍 强行解析前，API 返回的原始内容是: {response.text}")
+    raise
     if response["code"] == "404":
         print("推送消息失败，请检查地区名是否有误！")
         os.system("pause")
