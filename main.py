@@ -35,44 +35,51 @@ def get_weather(region):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
     }
     key = config["weather_key"]
-    region_url = f"https://geoapi.qweather.com/v2/city/lookup?location={region}&key={key}"
     
-    # 1. 获取地区ID
-    res = get(region_url, headers=headers)
-    if res.status_code != 200:
-        print(f"❌ 获取地区ID失败，HTTP状态码: {res.status_code}，返回内容: {res.text}")
-        sys.exit(1)
+    # 🌟 修复点 1：清理地区名称中可能包含的隐藏空格或换行
+    clean_region = region.strip()
+    
+    # 🌟 修复点 2：使用 params 字典传参，requests 会自动将中文“怀化”安全地编码为 %E6%80%80%E5%8C%96
+    region_api_url = "https://geoapi.qweather.com/v2/city/lookup"
+    res = get(region_api_url, headers=headers, params={"location": clean_region, "key": key})
         
     try:
         response = res.json()
     except Exception:
-        print(f"❌ 地区接口返回非JSON数据 (可能被拦截): {res.text}")
+        print(f"❌ 地区接口返回非JSON数据，HTTP状态码: {res.status_code}，可能网关拦截或URL错误。内容: {res.text}")
         sys.exit(1)
 
-    if response["code"] == "404":
-        print("❌ 推送消息失败，请检查地区名是否有误！")
+    # 和风天气的返回码是字符串格式
+    code = str(response.get("code"))
+    if code == "404":
+        print(f"❌ 推送消息失败，查不到地区：{clean_region}，请检查地区名是否有误！")
         sys.exit(1)
-    elif response["code"] == "401":
-        print("❌ 推送消息失败，请检查和风天气key是否正确！")
+    elif code == "401":
+        print("❌ 推送消息失败，请检查和风天气 key 是否正确或是否已过期！")
+        sys.exit(1)
+    elif code != "200":
+        print(f"❌ 获取地区ID失败，和风天气返回码: {code}")
         sys.exit(1)
     
     location_id = response["location"][0]["id"]
     
-    # 2. 获取天气详情
-    weather_url = f"https://devapi.qweather.com/v7/weather/now?location={location_id}&key={key}"
-    res_weather = get(weather_url, headers=headers)
+    # 获取天气详情 (同样使用 params 进行安全请求)
+    weather_api_url = "https://devapi.qweather.com/v7/weather/now"
+    res_weather = get(weather_api_url, headers=headers, params={"location": location_id, "key": key})
     
-    if res_weather.status_code != 200:
-        print(f"❌ 获取天气失败，HTTP状态码: {res_weather.status_code}，返回内容: {res_weather.text}")
+    try:
+        response_weather = res_weather.json()
+    except Exception:
+        print(f"❌ 天气详情接口解析失败，HTTP状态码: {res_weather.status_code}")
         sys.exit(1)
 
-    response_weather = res_weather.json()
-    # 天气
+    # 解析天气
     weather = response_weather["now"]["text"]
     # 当前温度
     temp = response_weather["now"]["temp"] + u"\N{DEGREE SIGN}" + "C"
     # 风向
     wind_dir = response_weather["now"]["windDir"]
+    
     return weather, temp, wind_dir
 
 def get_birthday(birthday_str, year, today):
