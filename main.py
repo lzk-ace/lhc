@@ -34,37 +34,61 @@ def get_weather(region):
     headers = {
         'User-Agent': 'WeatherPushScript/1.0 (requests/Python)'
     }
+    # 这里读取的就是你刚才在 config.txt 里换好的高德 Key
     key = str(config.get("weather_key", "")).strip()
+    clean_region = str(region).strip()
     
-    # 🌟 强行绕过被封锁的地区搜索接口，直接使用怀化市的专属 ID！
-    location_id = "101251201" 
-    print(f"🌟 已跳过城市搜索接口，强行使用怀化市 ID: {location_id} 进行请求...")
+    print(f"⏳ 正在使用高德接口转换城市代码: {clean_region}...")
     
-    # 直接获取天气详情
-    weather_api_url = "https://devapi.qweather.com/v7/weather/now"
-    res_weather = get(weather_api_url, headers=headers, params={"location": location_id, "key": key})
+    # 1. 高德地理编码 API：将城市名（如"怀化"）转换为专属 adcode
+    geo_url = "https://restapi.amap.com/v3/geocode/geo"
+    geo_res = get(geo_url, headers=headers, params={"address": clean_region, "key": key})
     
-    print(f"🔍 [调试] 天气接口最终请求状态: {res_weather.status_code}")
-    
-    if res_weather.status_code != 200:
-        print(f"❌ 坏消息，连天气详情接口也被 Github IP 彻底拉黑了。内容: '{res_weather.text}'")
+    try:
+        geo_data = geo_res.json()
+    except Exception:
+        print(f"❌ 高德地理接口返回异常。状态码: {geo_res.status_code}，内容: {geo_res.text}")
         sys.exit(1)
         
+    if geo_data.get("status") != "1":
+        print(f"❌ 获取城市编码失败，高德报错信息: {geo_data.get('info')}")
+        sys.exit(1)
+        
+    if not geo_data.get("geocodes"):
+        print(f"❌ 高德地图找不到城市：{clean_region}，请检查是否拼写错误。")
+        sys.exit(1)
+        
+    # 提取高德的城市代码（adcode）
+    adcode = geo_data["geocodes"][0]["adcode"]
+    
+    print(f"⏳ 成功获取城市代码 {adcode}，正在查询天气...")
+    
+    # 2. 高德天气 API
+    weather_url = "https://restapi.amap.com/v3/weather/weatherInfo"
+    weather_res = get(weather_url, headers=headers, params={"city": adcode, "key": key, "extensions": "base"})
+    
     try:
-        response_weather = res_weather.json()
+        weather_data = weather_res.json()
     except Exception:
-        print(f"❌ 天气详情接口返回非 JSON 数据，已被拦截！")
+        print(f"❌ 高德天气接口返回异常。状态码: {weather_res.status_code}")
         sys.exit(1)
-
-    code = str(response_weather.get("code"))
-    if code != "200":
-        print(f"❌ 获取天气失败，和风天气业务报错码: {code}")
+        
+    if weather_data.get("status") != "1":
+        print(f"❌ 获取天气详情失败，高德报错信息: {weather_data.get('info')}")
         sys.exit(1)
-
-    # 解析天气
-    weather = response_weather["now"]["text"]
-    temp = response_weather["now"]["temp"] + u"\N{DEGREE SIGN}" + "C"
-    wind_dir = response_weather["now"]["windDir"]
+        
+    lives = weather_data.get("lives", [])
+    if not lives:
+        print("❌ 天气数据为空")
+        sys.exit(1)
+        
+    # 3. 解析并组装天气数据
+    weather = lives[0].get("weather")
+    temp = lives[0].get("temperature") + u"\N{DEGREE SIGN}" + "C"
+    
+    # 高德返回的风向只有"东北"，加个"风"字读起来更顺口
+    wind_dir_raw = lives[0].get("winddirection")
+    wind_dir = f"{wind_dir_raw}风" if wind_dir_raw and wind_dir_raw != "无" else wind_dir_raw
     
     return weather, temp, wind_dir
 
