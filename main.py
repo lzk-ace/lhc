@@ -31,31 +31,40 @@ def get_access_token():
         sys.exit(1)
 
 def get_weather(region):
+    # 🌟 核心突破点 1：不再伪造浏览器！使用普通的脚本 UA 往往更容易通过国内 API 的机房防护策略
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
+        'User-Agent': 'WeatherPushScript/1.0 (requests/Python)'
     }
-    key = config["weather_key"]
     
-    # 🌟 修复点 1：清理地区名称中可能包含的隐藏空格或换行
-    clean_region = region.strip()
+    # 🌟 核心突破点 2：彻底清理配置文件中的隐藏换行符和空格（非常关键！）
+    key = str(config.get("weather_key", "")).strip()
+    clean_region = str(region).strip()
     
-    # 🌟 修复点 2：使用 params 字典传参，requests 会自动将中文“怀化”安全地编码为 %E6%80%80%E5%8C%96
     region_api_url = "https://geoapi.qweather.com/v2/city/lookup"
+    
+    # 发送请求获取地区ID
     res = get(region_api_url, headers=headers, params={"location": clean_region, "key": key})
+    
+    # 🌟 调试神器：在日志里打印出它实际拼出的 URL（隐藏你的真实 Key 防止泄露）
+    # 如果下次还失败，你可以把打印出来的链接直接复制到自己电脑浏览器里看看能不能打开！
+    safe_url = res.url.replace(key, "******") if key else res.url
+    print(f"🔍 [调试诊断] 正在请求接口: {safe_url}")
         
     try:
         response = res.json()
     except Exception:
-        print(f"❌ 地区接口返回非JSON数据，HTTP状态码: {res.status_code}，可能网关拦截或URL错误。内容: {res.text}")
+        print(f"❌ 地区接口依然被拦截！HTTP状态码: {res.status_code}")
+        print(f"返回的原始内容: '{res.text}'")
+        print("💡 终极诊断建议：请复制上面的 [调试诊断] 链接，把 ****** 换成你的真实 Key，在你的电脑浏览器里打开看看。如果电脑能打开但 GitHub 上打不开，说明 GitHub IP 彻底被和风拉黑了。")
         sys.exit(1)
 
-    # 和风天气的返回码是字符串格式
+    # 这里的 code 才是和风天气应用层返回的真实状态
     code = str(response.get("code"))
     if code == "404":
-        print(f"❌ 推送消息失败，查不到地区：{clean_region}，请检查地区名是否有误！")
+        print(f"❌ 推送失败，和风天气查不到地区：{clean_region}，请检查该地区是否支持！")
         sys.exit(1)
     elif code == "401":
-        print("❌ 推送消息失败，请检查和风天气 key 是否正确或是否已过期！")
+        print("❌ 推送失败，请检查和风天气 key 是否正确、是否过期，或你是否注册错了版本！")
         sys.exit(1)
     elif code != "200":
         print(f"❌ 获取地区ID失败，和风天气返回码: {code}")
@@ -63,7 +72,7 @@ def get_weather(region):
     
     location_id = response["location"][0]["id"]
     
-    # 获取天气详情 (同样使用 params 进行安全请求)
+    # 获取天气详情
     weather_api_url = "https://devapi.qweather.com/v7/weather/now"
     res_weather = get(weather_api_url, headers=headers, params={"location": location_id, "key": key})
     
@@ -75,13 +84,10 @@ def get_weather(region):
 
     # 解析天气
     weather = response_weather["now"]["text"]
-    # 当前温度
     temp = response_weather["now"]["temp"] + u"\N{DEGREE SIGN}" + "C"
-    # 风向
     wind_dir = response_weather["now"]["windDir"]
     
     return weather, temp, wind_dir
-
 def get_birthday(birthday_str, year, today):
     birthday_year = birthday_str.split("-")[0]
     # 判断是否为农历生日
