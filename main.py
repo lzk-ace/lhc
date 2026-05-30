@@ -172,8 +172,8 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
             "temp": {"value": temp, "color": get_color()},
             "wind_dir": {"value": wind_dir, "color": get_color()},
             "love_day": {"value": love_days, "color": get_color()},
-            "noteen": {"value": note_en, "color": get_color()},
-            "notech": {"value": note_ch, "color": get_color()}
+            "en": {"value": note_en, "color": "#000000"},
+            "ch": {"value": note_ch, "color": "#000000"}
         }
     }
     
