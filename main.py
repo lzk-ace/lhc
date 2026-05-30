@@ -15,28 +15,47 @@ def get_access_token():
     app_secret = config.get("app_secret")
     post_url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={app_id}&secret={app_secret}"
     try:
-        return requests.get(post_url).json()['access_token']
+        res = requests.get(post_url).json()
+        if "access_token" in res:
+            return res['access_token']
+        else:
+            print(f"❌ 微信拒绝访问！(大概率是 app_secret 错误或失效)\n微信返回: {res}")
+            sys.exit(1)
     except Exception as e:
-        print(f"获取 access_token 失败: {e}")
+        print(f"请求微信接口异常: {e}")
         sys.exit(1)
 
 def get_weather(region):
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    """专门为高德开放平台编写的天气获取逻辑"""
     key = config.get("weather_key")
-    region_url = f"https://geoapi.qweather.com/v2/city/lookup?location={region}&key={key}"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # 第一步：高德地理编码接口（将地名转换为高德专属 adcode）
+    geo_url = f"https://restapi.amap.com/v3/geocode/geo?address={region}&key={key}"
     try:
-        res_region = requests.get(region_url, headers=headers)
-        if res_region.status_code != 200: return "限流中", "未知", "未知"
-        region_data = res_region.json()
-        if str(region_data.get("code")) != "200": return "限流中", "未知", "未知"
-        location_id = region_data["location"][0]["id"]
-        weather_url = f"https://devapi.qweather.com/v7/weather/now?location={location_id}&key={key}"
-        res_weather = requests.get(weather_url, headers=headers)
-        if res_weather.status_code != 200: return "限流中", "未知", "未知"
-        weather_data = res_weather.json()
-        return weather_data["now"]["text"], weather_data["now"]["temp"] + "°C", weather_data["now"]["windDir"]
-    except Exception:
-        return "限流中", "未知", "未知"
+        geo_res = requests.get(geo_url, headers=headers).json()
+        if geo_res.get("status") == "1" and geo_res.get("geocodes"):
+            adcode = geo_res["geocodes"][0]["adcode"]
+        else:
+            print(f"⚠️ 高德无法识别地区 '{region}' 或 Key 无效。返回: {geo_res}")
+            return "获取失败", "未知", "未知"
+            
+        # 第二步：高德实时天气接口
+        weather_url = f"https://restapi.amap.com/v3/weather/weatherInfo?city={adcode}&key={key}"
+        weather_res = requests.get(weather_url, headers=headers).json()
+        if weather_res.get("status") == "1" and weather_res.get("lives"):
+            live = weather_res["lives"][0]
+            weather = live.get("weather")
+            temp = live.get("temperature") + "°C"
+            wind_dir = live.get("winddirection") + "风"
+            return weather, temp, wind_dir
+        else:
+            print(f"⚠️ 高德天气获取失败: {weather_res}")
+            return "获取失败", "未知", "未知"
+            
+    except Exception as e:
+        print(f"⚠️ 高德接口请求异常: {e}")
+        return "获取失败", "未知", "未知"
 
 def get_birthday(birthday, year, today):
     birthday_year = birthday.split("-")[0]
@@ -65,15 +84,12 @@ def get_birthday(birthday, year, today):
         return (year_date - today).days
 
 def get_ciba():
-    """获取金山词霸每日金句，带有坚固的保底机制"""
     url = "https://open.iciba.com/dsapi/"
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
     try:
         r = requests.get(url, headers=headers, timeout=5)
         data = r.json()
-        note_ch = data.get("note", "愿你每一天都充满阳光。")
-        note_en = data.get("content", "May your every day be full of sunshine.")
-        return note_ch, note_en
+        return data.get("note", "愿你每一天都充满阳光。"), data.get("content", "May your every day be full of sunshine.")
     except Exception:
         return "愿你每一天都充满阳光。", "May your every day be full of sunshine."
 
@@ -97,7 +113,6 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
             "temp": {"value": temp, "color": get_color()},
             "wind_dir": {"value": wind_dir, "color": get_color()},
             "love_day": {"value": love_days, "color": get_color()},
-            # 恢复真实的金句变量
             "cn": {"value": note_ch, "color": get_color()},
             "en": {"value": note_en, "color": get_color()}
         }
@@ -115,19 +130,20 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
         else:
             print(f"[{to_user}] 推送失败: {response.json()}")
     except Exception as e:
-        print(f"请求异常: {e}")
+        print(f"请求微信接口异常: {e}")
 
 if __name__ == "__main__":
     try:
         with open("config.txt", encoding="utf-8") as f:
             config = ast.literal_eval(f.read())
     except Exception as e:
-        print(f"配置错误: {e}")
+        print(f"读取 config.txt 失败: {e}")
         sys.exit(1)
 
     accessToken = get_access_token()
     users = config.get("user", [])
-    region = config.get("region", "未知")
+    
+    region = config.get("region", "怀化")
     weather, temp, wind_dir = get_weather(region)
     
     note_ch = config.get("note_ch", "").strip()
