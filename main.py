@@ -64,17 +64,7 @@ def get_birthday(birthday, year, today):
     else:
         return (year_date - today).days
 
-def get_ciba():
-    url = "https://open.iciba.com/dsapi/"
-    headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
-    try:
-        r = requests.get(url, headers=headers, timeout=5)
-        data = r.json()
-        return data.get("note", "愿你每一天都充满阳光。"), data.get("content", "May your every day be full of sunshine.")
-    except Exception:
-        return "愿你每一天都充满阳光。", "May your every day be full of sunshine."
-
-def send_message(to_user, access_token, region_name, weather, temp, wind_dir, note_ch, note_en):
+def send_message(to_user, access_token, region_name, weather, temp, wind_dir):
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
     today = datetime.date(datetime(year=localtime().tm_year, month=localtime().tm_mon, day=localtime().tm_mday))
     week = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][today.isoweekday() % 7]
@@ -94,8 +84,10 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
             "temp": {"value": temp, "color": get_color()},
             "wind_dir": {"value": wind_dir, "color": get_color()},
             "love_day": {"value": love_days, "color": get_color()},
-            "en": {"value": note_en, "color": get_color()},
-            "cn": {"value": note_ch, "color": get_color()}
+            
+            # 强行锁死金句内容，排除网络抓取问题！
+            "cn": {"value": "如果你看到这句话，说明之前绝对是被折叠或网络抓取失败了！", "color": "#FF0000"},
+            "en": {"value": "We finally made it!", "color": "#000000"}
         }
     }
     
@@ -126,10 +118,5 @@ if __name__ == "__main__":
     region = config.get("region", "未知")
     weather, temp, wind_dir = get_weather(region)
     
-    note_ch = config.get("note_ch", "").strip()
-    note_en = config.get("note_en", "").strip()
-    if not note_ch and not note_en:
-        note_ch, note_en = get_ciba()
-        
     for user in users:
-        send_message(user, accessToken, region, weather, temp, wind_dir, note_ch, note_en)
+        send_message(user, accessToken, region, weather, temp, wind_dir)
