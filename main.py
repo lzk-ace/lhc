@@ -226,11 +226,16 @@ if __name__ == "__main__":
     print(f"⏳ 正在获取 {region} 的天气信息...")
     weather, temp, wind_dir = get_weather(region)
     
-    note_ch = config.get("note_ch", "")
-    note_en = config.get("note_en", "")
+  # 加入 .strip() 自动清除看不见的空格
+    note_ch = config.get("note_ch", "").strip()
+    note_en = config.get("note_en", "").strip()
+    
     if not note_ch and not note_en:
-        print("⏳ 正在获取词霸每日金句...")
         note_ch, note_en = get_ciba()
+        
+    # 增加一行打印日志，帮你揪出问题！
+    print(f"👉 最终准备推送的金句内容是：\n中文: {note_ch}\n英文: {note_en}")
+     
         
     print("⏳ 开始推送消息...")
     for user in users:
