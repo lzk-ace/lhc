@@ -57,31 +57,57 @@ def get_weather(region):
         print(f"⚠️ 高德接口请求异常: {e}")
         return "获取失败", "未知", "未知"
 
-def get_birthday(birthday, year, today):
-    birthday_year = birthday.split("-")[0]
-    if birthday_year[0] == "r":
-        r_mouth = int(birthday.split("-")[1])
-        r_day = int(birthday.split("-")[2])
-        try:
-            birthday_date = ZhDate(year, r_mouth, r_day).to_datetime().date()
-        except TypeError:
-            print("农历生日日期错误")
-            sys.exit(1)
-        year_date = date(year, birthday_date.month, birthday_date.day)
+def get_birthday(birthday, current_year, today):
+    """
+    重写后的完美生日计算逻辑，修复了闰年、跨年和阴历转换 Bug
+    """
+    is_lunar = False
+    # 自动识别并剥离农历标记 "r"
+    if birthday.startswith("r"):
+        is_lunar = True
+        birthday = birthday.replace("r", "").strip("-")
+    
+    parts = birthday.split("-")
+    if len(parts) == 3:
+        _, month, day = parts
+    elif len(parts) == 2:
+        month, day = parts
     else:
-        year_date = date(year, int(birthday.split("-")[1]), int(birthday.split("-")[2]))
+        print(f"⚠️ 生日格式错误: {birthday}")
+        sys.exit(1)
         
-    if today > year_date:
-        if birthday_year[0] == "r":
-            r_last = ZhDate((year + 1), r_mouth, r_day).to_datetime().date()
-            birth_date = date((year + 1), r_last.month, r_last.day)
-        else:
-            birth_date = date((year + 1), int(birthday.split("-")[1]), int(birthday.split("-")[2]))
-        return (birth_date - today).days
-    elif today == year_date:
-        return 0
+    month = int(month)
+    day = int(day)
+    
+    if is_lunar:
+        # 农历生日计算
+        try:
+            this_year_bday = ZhDate(current_year, month, day).to_datetime().date()
+        except Exception:
+            print(f"⚠️ 农历日期错误: {month}月{day}日")
+            sys.exit(1)
+            
+        if today > this_year_bday:
+            # 如果今年的农历生日已经过了，计算明年的
+            this_year_bday = ZhDate(current_year + 1, month, day).to_datetime().date()
+            
+        return (this_year_bday - today).days
+        
     else:
-        return (year_date - today).days
+        # 公历生日计算（自带闰年保护）
+        try:
+            this_year_bday = date(current_year, month, day)
+        except ValueError:
+            # 遇到平年没有 2月29日，默认按 3月1日 过生日
+            this_year_bday = date(current_year, 3, 1)
+            
+        if today > this_year_bday:
+            try:
+                this_year_bday = date(current_year + 1, month, day)
+            except ValueError:
+                this_year_bday = date(current_year + 1, 3, 1)
+                
+        return (this_year_bday - today).days
 
 def get_ciba():
     url = "https://open.iciba.com/dsapi/"
